@@ -11,7 +11,7 @@ import { DEMO_AUTH_COOKIE, demoAuthToken } from "@/lib/demo-auth";
  *
  * Leave DEMO_PASSWORD unset for a fully open demo.
  */
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const demoPassword = process.env.DEMO_PASSWORD;
 
@@ -30,7 +30,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const expected = demoAuthToken(demoPassword);
+  const expected = await demoAuthToken(demoPassword);
   const token = req.cookies.get(DEMO_AUTH_COOKIE)?.value;
   if (token === expected) {
     return NextResponse.next();

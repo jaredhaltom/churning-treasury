@@ -1,8 +1,10 @@
-import { createHash } from "node:crypto";
-
 export const DEMO_AUTH_COOKIE = "demo_auth";
 
-/** Deterministic session token derived from DEMO_PASSWORD. Never store the raw password in the cookie. */
-export function demoAuthToken(password: string): string {
-  return createHash("sha256").update(`churning-demo:${password}`).digest("hex");
+/** Deterministic session token derived from DEMO_PASSWORD. Edge-safe (Web Crypto). */
+export async function demoAuthToken(password: string): Promise<string> {
+  const data = new TextEncoder().encode(`churning-demo:${password}`);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }

@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(DEMO_AUTH_COOKIE, demoAuthToken(demoPassword), {
+  res.cookies.set(DEMO_AUTH_COOKIE, await demoAuthToken(demoPassword), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
