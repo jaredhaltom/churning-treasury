@@ -6,7 +6,7 @@
     "dev": "next dev --experimental-https",
     "dev:http": "next dev",
     "build": "next build",
-    "build:demo": "rm -f prisma/demo.db prisma/demo.db-journal && DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" prisma db push --skip-generate --accept-data-loss && DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" tsx scripts/seed-demo.ts && next build",
+    "build:demo": "rm -f prisma/demo.db prisma/demo.db-journal && DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" prisma db push --skip-generate --accept-data-loss && DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" tsx scripts/seed-demo.ts && tsx scripts/embed-demo-db.ts && next build",
     "seed:demo": "DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" tsx scripts/seed-demo.ts",
     "start": "next start",
     "lint": "next lint",
