@@ -31,8 +31,10 @@ type PgEnv = { urlVar: string; directUrlVar: string };
 function resolvePgEnv(): PgEnv | null {
   const candidates: PgEnv[] = [
     { urlVar: "POSTGRES_PRISMA_URL", directUrlVar: "POSTGRES_URL_NON_POOLING" },
+    { urlVar: "DATABASE_URL", directUrlVar: "DATABASE_URL_UNPOOLED" },
     { urlVar: "DATABASE_URL", directUrlVar: "DIRECT_URL" },
     { urlVar: "DATABASE_URL", directUrlVar: "POSTGRES_URL_NON_POOLING" },
+    { urlVar: "POSTGRES_PRISMA_URL", directUrlVar: "DATABASE_URL_UNPOOLED" },
   ];
 
   for (const c of candidates) {
