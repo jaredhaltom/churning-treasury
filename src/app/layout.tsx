@@ -6,6 +6,7 @@ import { IS_DEMO } from "@/lib/demo";
 export const metadata: Metadata = {
   title: "Churning Treasury",
   description: "Manufactured spend & credit card rewards treasury management",
+  ...(IS_DEMO ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default function RootLayout({

@@ -35,9 +35,8 @@ export function DemoBanner() {
         <p className="flex-1 leading-snug">
           <span className="font-medium text-foreground">Demo mode.</span>{" "}
           All data is seeded and fabricated. You can click around freely —
-          your edits persist for this session but reset when the demo
-          container goes cold (a few minutes of inactivity). Plaid bank
-          linking is disabled.
+          edits persist in the shared playground and reset daily (or on each
+          deploy). Plaid bank linking is disabled.
         </p>
         <button
           type="button"
