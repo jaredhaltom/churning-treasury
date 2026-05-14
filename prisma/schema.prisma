@@ -3,7 +3,12 @@
 // the application layer (see src/lib/constants.ts).
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Generate the query engine binary for Vercel's Linux/OpenSSL3 runtime in
+  // addition to whatever the developer's local machine is. Without this,
+  // Prisma builds on macOS produce a darwin-only engine that crashes at
+  // runtime on Vercel with "Prisma Client could not locate the Query Engine".
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

@@ -46,9 +46,23 @@ export function bootstrapDemoDb(): void {
     );
   }
 
-  if (!fs.existsSync(DEMO_DB_RUNTIME)) {
+  const exists = fs.existsSync(DEMO_DB_RUNTIME);
+  const existingSize = exists ? fs.statSync(DEMO_DB_RUNTIME).size : 0;
+
+  if (!exists || existingSize === 0) {
     const buf = Buffer.from(DEMO_DB_BASE64, "base64");
     fs.writeFileSync(DEMO_DB_RUNTIME, buf);
+    const writtenSize = fs.statSync(DEMO_DB_RUNTIME).size;
+    console.log(
+      `[demo] Materialized demo DB at ${DEMO_DB_RUNTIME}: ` +
+        `base64=${DEMO_DB_BASE64.length} chars, ` +
+        `decoded=${buf.byteLength} bytes, ` +
+        `on-disk=${writtenSize} bytes`,
+    );
+  } else {
+    console.log(
+      `[demo] Reusing existing demo DB at ${DEMO_DB_RUNTIME} (${existingSize} bytes)`,
+    );
   }
 
   bootstrapped = true;
