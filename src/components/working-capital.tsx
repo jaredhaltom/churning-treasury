@@ -11,7 +11,9 @@ export async function WorkingCapital() {
     _count: true,
     where: {
       type: ASSET_TYPE.GIFT_CARD,
-      subType: "BBY",
+      // subType encodes the per-run liquidation rate, e.g. "BBY-92.5%" — not
+      // the bare string "BBY". Match the BBY family, not an exact label.
+      subType: { startsWith: "BBY" },
       status: { not: ASSET_STATUS.LIQUIDATED },
     },
   });
