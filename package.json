@@ -1,0 +1,47 @@
+{
+  "name": "churning-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --experimental-https",
+    "dev:http": "next dev",
+    "build": "next build",
+    "build:demo": "rm -f prisma/demo.db prisma/demo.db-journal && DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" prisma db push --skip-generate --accept-data-loss && DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" tsx scripts/seed-demo.ts && next build",
+    "seed:demo": "DATABASE_URL=\"file:$(pwd)/prisma/demo.db\" tsx scripts/seed-demo.ts",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.454.0",
+    "next": "^15.1.0",
+    "plaid": "^42.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-plaid-link": "^4.1.1",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.22.0",
+    "typescript": "^5.6.3"
+  }
+}

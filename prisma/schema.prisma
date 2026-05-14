@@ -1,0 +1,170 @@
+// Prisma schema for the Churning / Manufactured Spend treasury system.
+// SQLite does not support enums, so we use string constants enforced at
+// the application layer (see src/lib/constants.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Card: a single issued credit card with a velocity (cooldown) clock.
+// ---------------------------------------------------------------------------
+model Card {
+  id            String   @id @default(cuid())
+  type          String   // "ABP" | "ABG" | "VENMO" | "OTHER"
+  nickname      String?
+  openDate      DateTime
+  spendTarget   Float    @default(0)   // e.g. 20000 for ABP
+  currentSpend  Float    @default(0)
+  cooldownDays  Int      @default(91)  // Amex family rule
+  signupBonus   Int      @default(0)   // MR points or cashback units
+  closed        Boolean  @default(false)
+
+  // If set, `currentSpend` is Plaid-derived and should be treated as
+  // read-only in the UI. When null, the user manually maintains it.
+  plaidItemId   String?
+  plaidItem     PlaidItem? @relation(fields: [plaidItemId], references: [id], onDelete: SetNull)
+  plaidAccountId String?  // Plaid account_id within the item (specific card)
+
+  transactions  Transaction[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([type, openDate])
+  @@index([plaidItemId])
+}
+
+// ---------------------------------------------------------------------------
+// Transaction: one acquisition event. A single swipe can spawn multiple
+// InventoryAsset rows (e.g. a King Soopers run spawns Gift Card + Fuel
+// Points + Venmo Cashback).
+// ---------------------------------------------------------------------------
+model Transaction {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  merchant  String   // e.g. "King Soopers", "Amex SUB"
+  amount    Float    // dollars charged to the card (post-reconciliation, authoritative)
+  notes     String?
+
+  // Reconciliation state.
+  //   "MANUAL_UNMATCHED" : created by manual form, no Plaid txn linked yet
+  //   "PLAID_UNRECONCILED": came from Plaid, user has not classified yet (Inbox)
+  //   "RECONCILED_MS"    : Plaid charge linked to an MS inventory event
+  //   "RECONCILED_NON_MS": user marked as regular spend (groceries, etc.)
+  status               String   @default("MANUAL_UNMATCHED")
+  category             String?  // "GROCERIES" | "GAS" | "OTHER" etc. (optional hint)
+  plaidTransactionId   String?  @unique
+  plaidAccountId       String?
+  reconciledAt         DateTime?
+
+  assets    InventoryAsset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([cardId])
+  @@index([status])
+  @@index([plaidAccountId])
+}
+
+// ---------------------------------------------------------------------------
+// InventoryAsset: a floating asset waiting to be liquidated.
+// type: "GIFT_CARD" | "FUEL_POINTS" | "MR_POINTS" | "CASHBACK"
+// status: "HELD" | "PENDING_SALE" | "LIQUIDATED"
+// ---------------------------------------------------------------------------
+model InventoryAsset {
+  id                       String   @id @default(cuid())
+  type                     String
+  subType                  String?  // e.g. "BBY" for gift cards, "KS" for King Soopers fuel
+  status                   String   @default("HELD")
+
+  // Quantity is denominated in the asset's native unit:
+  //   GIFT_CARD    -> face value in dollars
+  //   FUEL_POINTS  -> points
+  //   MR_POINTS    -> points
+  //   CASHBACK     -> dollars (always acquired as liquid cash)
+  quantity                 Float
+
+  acquisitionCost          Float    // cash outlay attributable to this asset
+  expectedLiquidationValue Float    // midpoint expected payout
+
+  acquiredDate             DateTime @default(now())
+
+  sourceTransactionId      String?
+  sourceTransaction        Transaction? @relation(fields: [sourceTransactionId], references: [id], onDelete: SetNull)
+
+  liquidation              LiquidationEvent?
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([status, acquiredDate])
+}
+
+// ---------------------------------------------------------------------------
+// PlaidItem: one connection to a financial institution (Amex, Venmo, ...).
+// Holds the access_token obtained at Link exchange. A single Item can expose
+// multiple accounts (cards), each of which maps to a Card via plaidAccountId.
+// ---------------------------------------------------------------------------
+model PlaidItem {
+  id              String   @id @default(cuid())
+  institutionId   String?
+  institutionName String?
+  // NOTE: Plaid access tokens are long-lived secrets. In production these
+  // should be encrypted at rest. For this local/single-user app they live in
+  // the SQLite file alongside the user's other secrets (same trust boundary
+  // as .env.local). If this ever ships multi-user, wrap with libsodium.
+  accessToken     String
+  itemId          String   @unique // Plaid's item_id
+  cursor          String?  // /transactions/sync cursor for incremental pulls
+  lastSyncedAt    DateTime?
+
+  cards           Card[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// LiquidationEvent: the sell-side of the ledger. One-to-one with the
+// InventoryAsset it closes out.
+// ---------------------------------------------------------------------------
+model LiquidationEvent {
+  id                 String   @id @default(cuid())
+  inventoryAssetId   String   @unique
+  inventoryAsset     InventoryAsset @relation(fields: [inventoryAssetId], references: [id], onDelete: Cascade)
+
+  date               DateTime @default(now())
+  buyer              String   // e.g. "Aligned Incentives", "Kroger Fuel"
+  proceedsType       String   @default("CASH") // "CASH" | "NON_CASH"
+  realizedRevenue    Float
+  profit             Float    // realizedRevenue - asset.acquisitionCost (persisted for fast reporting)
+  daysToLiquidation  Int      // acquiredDate -> date
+  notes              String?
+
+  createdAt          DateTime @default(now())
+
+  @@index([date])
+  @@index([proceedsType, date])
+}
+
+// ---------------------------------------------------------------------------
+// AppSetting: singleton-ish key/value settings for configurable defaults.
+// ---------------------------------------------------------------------------
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
