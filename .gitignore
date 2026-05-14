@@ -5,6 +5,7 @@ node_modules
 *.db
 *.db-journal
 /prisma/dev.db*
+/prisma/schema.gen.prisma
 .DS_Store
 next-env.d.ts
 tsconfig.tsbuildinfo

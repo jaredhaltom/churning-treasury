@@ -1,7 +1,10 @@
 /**
  * Seed the public demo database with a fabricated-but-realistic churning
- * portfolio. Run by the Vercel build step against an empty
- * prisma/demo.db.
+ * portfolio. Run by:
+ *   - the Vercel build step (`npm run build:demo`) on each deploy, against
+ *     the project's attached Postgres database, and
+ *   - the /api/reset-demo endpoint (manually or via the daily Vercel cron)
+ *     to reset the shared playground back to seed.
  *
  * The data must:
  *   - Light up every dashboard widget (Velocity, Working Capital, Inbox,
@@ -11,21 +14,17 @@
  *   - Be deterministic — same input, same demo across builds — so we can
  *     screenshot it predictably.
  *
- * Usage (from the churning-app/ directory):
+ * Usage (from the churning-app/ directory, standalone CLI):
  *
- *   DATABASE_URL=file:./prisma/demo.db tsx scripts/seed-demo.ts
+ *   POSTGRES_PRISMA_URL=... tsx scripts/seed-demo.ts
  *
  * Safe to re-run: the script wipes all tables before inserting.
  */
 
-// Important: import the singleton prisma client so that helpers in
-// inventory-ops (which call prisma.$transaction on their OWN import of the
-// singleton) write to the same connection we do. Two clients pointing at the
-// same SQLite file would technically work but invite WAL / locking races.
-//
-// We rely on DATABASE_URL=file:./prisma/demo.db being set in the environment
-// when this script runs. NEXT_PUBLIC_DEMO_MODE is intentionally NOT set so
-// the singleton skips its /tmp bootstrap path.
+// Import the singleton prisma client so that helpers in inventory-ops (which
+// call prisma.$transaction on their OWN import of the singleton) share the
+// same connection. Connection picks up POSTGRES_PRISMA_URL via the generated
+// schema (see scripts/build-demo-schema.ts).
 import { prisma } from "../src/lib/prisma";
 import {
   ASSET_STATUS,
@@ -478,26 +477,40 @@ async function seedInbox(cards: Array<{ seed: CardSeed; id: string }>) {
   }
 }
 
-async function main() {
-  console.log("[seed-demo] Wiping existing demo data…");
+export interface SeedDemoResult {
+  cards: number;
+  transactions: number;
+  assets: number;
+  liquidations: number;
+  heldMrPoints: number;
+  realizedCashProfit: number;
+}
+
+/**
+ * Wipes and reseeds the demo database. Exported so /api/reset-demo can call
+ * it without spawning a child process.
+ */
+export async function seedDemo(
+  log: (msg: string) => void = (m) => console.log(m),
+): Promise<SeedDemoResult> {
+  log("[seed-demo] Wiping existing demo data…");
   await wipe();
 
-  console.log("[seed-demo] Creating cards…");
+  log("[seed-demo] Creating cards…");
   const cards = await createCards();
 
-  console.log("[seed-demo] Creating King Soopers runs…");
+  log("[seed-demo] Creating King Soopers runs…");
   const assets = await seedRuns(cards);
 
-  console.log("[seed-demo] Minting signup bonuses…");
+  log("[seed-demo] Minting signup bonuses…");
   await mintSubs(cards);
 
-  console.log("[seed-demo] Liquidating older inventory…");
+  log("[seed-demo] Liquidating older inventory…");
   await liquidateSome(cards, assets);
 
-  console.log("[seed-demo] Seeding inbox rows…");
+  log("[seed-demo] Seeding inbox rows…");
   await seedInbox(cards);
 
-  // Sanity stats for the build log.
   const [cardCount, txnCount, assetCount, liqCount] = await Promise.all([
     prisma.card.count(),
     prisma.transaction.count(),
@@ -512,20 +525,46 @@ async function main() {
     _sum: { profit: true },
     where: { proceedsType: PROCEEDS_TYPE.CASH },
   });
-  console.log(
+
+  const heldMrPoints = heldMr._sum.quantity ?? 0;
+  const realizedCashProfit = cashProfit._sum.profit ?? 0;
+
+  log(
     `[seed-demo] Done. ${cardCount} cards, ${txnCount} transactions, ` +
       `${assetCount} assets, ${liqCount} liquidations. ` +
-      `Held MR: ${(heldMr._sum.quantity ?? 0).toLocaleString()} ` +
-      `(@${MR_POINT_VALUE} = ~$${((heldMr._sum.quantity ?? 0) * MR_POINT_VALUE).toFixed(0)}). ` +
-      `Realized cash profit: $${(cashProfit._sum.profit ?? 0).toFixed(2)}.`,
+      `Held MR: ${heldMrPoints.toLocaleString()} ` +
+      `(@${MR_POINT_VALUE} = ~$${(heldMrPoints * MR_POINT_VALUE).toFixed(0)}). ` +
+      `Realized cash profit: $${realizedCashProfit.toFixed(2)}.`,
   );
+
+  return {
+    cards: cardCount,
+    transactions: txnCount,
+    assets: assetCount,
+    liquidations: liqCount,
+    heldMrPoints,
+    realizedCashProfit,
+  };
 }
 
-main()
-  .catch((e) => {
-    console.error("[seed-demo] Failed:", e);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// CLI entry point. Only runs when this file is executed directly via
+// `tsx scripts/seed-demo.ts`, not when imported by /api/reset-demo. We
+// detect the CLI invocation by checking the script entry path rather
+// than using `require.main`/`import.meta`, which behave inconsistently
+// across the tsx + Next.js bundler + jest sandboxes.
+const ENTRY = process.argv[1] ?? "";
+if (
+  ENTRY.endsWith("/seed-demo.ts") ||
+  ENTRY.endsWith("/seed-demo.js") ||
+  ENTRY.endsWith("\\seed-demo.ts") ||
+  ENTRY.endsWith("\\seed-demo.js")
+) {
+  seedDemo()
+    .catch((e) => {
+      console.error("[seed-demo] Failed:", e);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
